@@ -1,0 +1,13 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# 临时文件
+*.log
+*.tmp
+result_*.pdf
+
+# macOS / IDE
+.DS_Store
+.vscode/
