@@ -1,0 +1,5 @@
+Flask>=2.0
+reportlab>=3.6
+Pillow>=9.0
+PyMuPDF>=1.19
+tqdm    # 可选，用于进度条
