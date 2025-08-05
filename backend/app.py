@@ -4,6 +4,7 @@ import tempfile, shutil, os
 from uuid import uuid4
 from threading import Thread
 from tools.merge_invoice_and_screenshot import merge
+from tools.extract_invoice import extract as extract_invoice   # 新增
 
 app = Flask(__name__,
             static_folder="../frontend",
@@ -22,6 +23,43 @@ def index():
 #   error: str
 # }
 tasks = {}
+
+# ---------- 创建【发票信息提取】任务 2025-08-05新增功能2----------
+@app.route("/api/extract", methods=["POST"])
+def api_create_extract():
+    if not request.files:
+        return jsonify({"error": "请使用 FormData 上传文件"}), 400
+
+    task_id = uuid4().hex
+    tasks[task_id] = {"status": "uploading", "pct": 0, "type": "extract"}
+
+    work_dir = Path(tempfile.mkdtemp(prefix=f"extract_{task_id}_"))
+    for f in request.files.getlist("files"):
+        dst = work_dir / Path(f.filename)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        f.save(dst)
+
+    def _worker():
+        try:
+            tasks[task_id]["status"] = "processing"
+
+            def report(p): tasks[task_id]["pct"] = p
+
+            txt_path = extract_invoice(str(work_dir), report)
+            tasks[task_id].update({
+                "status": "done",
+                "pct": 100,
+                "txt": txt_path
+            })
+        except Exception as e:
+            tasks[task_id] = {"status": "error", "error": str(e)}
+        finally:
+            pass
+
+    Thread(target=_worker, daemon=True).start()
+    return jsonify({"task_id": task_id}), 202
+
+
 
 # --------------------- 创建任务 -----------------------
 @app.route("/api/merge", methods=["POST"])
@@ -83,20 +121,21 @@ def api_download(task_id):
     if info["status"] not in ("done", "partial"):
         return jsonify({"error": "not ready"}), 409
 
-    pdf_path = info.get("pdf")
-    if not pdf_path or not Path(pdf_path).exists():
+    # 这时 info 里可能有 pdf 或 txt
+    file_path = info.get("pdf") or info.get("txt")
+    if not file_path or not Path(file_path).exists():
         return jsonify({"error": "file missing"}), 410
 
-    # 下载完再删除 PDF
     @after_this_request
-    def _cleanup(resp):
+    def _cleanup(response):
         try:
-            os.remove(pdf_path)
-            # 若不想重复下载，可把任务删掉： tasks.pop(task_id, None)
-        finally:
-            return resp
+            # 下载完再删输出文件
+            os.remove(file_path)
+        except Exception:
+            pass
+        return response
 
-    return send_file(pdf_path, as_attachment=True)
+    return send_file(file_path, as_attachment=True)
 
 # ---------------------- 主入口 ------------------------
 if __name__ == "__main__":
