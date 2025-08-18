@@ -11,3 +11,5 @@ result_*.pdf
 # macOS / IDE
 .DS_Store
 .vscode/
+.DS_Store
+**/.DS_Store
