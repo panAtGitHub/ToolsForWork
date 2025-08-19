@@ -5,15 +5,13 @@ from .post_data import url, headers, build, with_pagination
 from .http_client import create_session, post_json
 from .processors import get_processor
 
-CSV_FIELDS = ['序号','项目名称','项目所在地','网页链接','公示时间','内容','设计统计','施工统计']
-
 def ensure_dir(path: str):
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
-def save_csv(path: str, rows: list[dict]):
+def save_csv(path: str, rows: list[dict], fields: list[str]):
     ensure_dir(path)
     with open(path, 'w', encoding='utf-8-sig', newline='') as f:
-        w = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        w = csv.DictWriter(f, fieldnames=['序号', *fields])
         w.writeheader()
         for i, row in enumerate(rows, start=1):
             out = {'序号': i, **row}
@@ -39,6 +37,7 @@ def run(equal: str, rn: int, outfmt: str, start: str | None, end: str | None, no
 
     pages = math.ceil(total / rn)
     proc = get_processor(equal)
+    fields = getattr(proc, 'CSV_FIELDS', [])
     rows, raw_pages = [], []
 
     for p in range(pages):
@@ -48,14 +47,15 @@ def run(equal: str, rn: int, outfmt: str, start: str | None, end: str | None, no
         raw_pages.append(data)
         recs = (data.get('result') or {}).get('records', []) or []
         for rec in recs:
-            rows.append(proc.extract_from_list(rec))
+            # 处理每条记录，部分字段需要进入详情页解析
+            rows.append(proc.extract_from_list(rec, session))
         print(f"第 {p+1}/{pages} 页，拉取 {len(recs)} 条")
         time.sleep(0.4)
 
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     outbase = os.path.abspath(f'./output/{equal}_{ts}')
     if outfmt == 'csv':
-        save_csv(f'{outbase}.csv', rows)
+        save_csv(f'{outbase}.csv', rows, fields)
         main_file = f'{outbase}.csv'
         print(f'CSV: {main_file}')
     else:
