@@ -13,3 +13,6 @@ result_*.pdf
 .vscode/
 .DS_Store
 **/.DS_Store
+
+# output
+output/
