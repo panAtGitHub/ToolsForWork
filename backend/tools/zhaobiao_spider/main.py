@@ -35,7 +35,7 @@ def run(equal: str, rn: int, outfmt: str, start: str | None, end: str | None, no
     total = (data0.get('result') or {}).get('totalcount', 0)
     print(f"总记录数: {total}")
     if total <= 0:
-        return
+        return None
 
     pages = math.ceil(total / rn)
     proc = get_processor(equal)
@@ -53,17 +53,20 @@ def run(equal: str, rn: int, outfmt: str, start: str | None, end: str | None, no
         time.sleep(0.4)
 
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-    outbase = f'./output/{equal}_{ts}'
+    outbase = os.path.abspath(f'./output/{equal}_{ts}')
     if outfmt == 'csv':
         save_csv(f'{outbase}.csv', rows)
-        print(f'CSV: {outbase}.csv')
+        main_file = f'{outbase}.csv'
+        print(f'CSV: {main_file}')
     else:
         save_json(f'{outbase}.json', rows)
-        print(f'JSON: {outbase}.json')
+        main_file = f'{outbase}.json'
+        print(f'JSON: {main_file}')
 
     with open(f'{outbase}_raw.json', 'w', encoding='utf-8') as f:
         json.dump(raw_pages, f, ensure_ascii=False, indent=2)
     print(f'原始JSON: {outbase}_raw.json')
+    return main_file
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()

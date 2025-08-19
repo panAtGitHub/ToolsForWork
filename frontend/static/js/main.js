@@ -152,7 +152,63 @@ function initExtract() {
   });
 }
 
+// 工具3：招标爬虫
+function initSpider() {
+  const equal   = document.getElementById("spider-equal");
+  const start   = document.getElementById("spider-start");
+  const end     = document.getElementById("spider-end");
+  const format  = document.getElementById("spider-format");
+  const btn     = document.getElementById("btn-spider");
+  const spin    = document.getElementById("spider-spinner");
+  const status  = document.getElementById("spider-status");
+
+  btn.addEventListener("click", async () => {
+    status.textContent = "";
+    spin.classList.remove("hidden");
+
+    const payload = {
+      equal: equal.value.trim(),
+      start: start.value || null,
+      end: end.value || null,
+      out: format.value
+    };
+
+    try {
+      const res = await fetch("/api/zhaobiao", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+      if (res.status !== 202) {
+        spin.classList.add("hidden");
+        status.textContent = "创建任务失败：" + res.statusText;
+        return;
+      }
+      const { task_id } = await res.json();
+      const timer = setInterval(async () => {
+        const r = await fetch(`/api/progress/${task_id}`);
+        if (!r.ok) { clearInterval(timer); spin.classList.add("hidden"); return; }
+        const info = await r.json();
+        if (info.status === "done") {
+          clearInterval(timer);
+          spin.classList.add("hidden");
+          status.textContent = "爬取完成，正在下载…";
+          window.location.href = `/api/download/${task_id}`;
+        } else if (info.status === "error") {
+          clearInterval(timer);
+          spin.classList.add("hidden");
+          status.textContent = "爬取失败：" + info.error;
+        }
+      }, 1000);
+    } catch (e) {
+      spin.classList.add("hidden");
+      status.textContent = "网络错误，创建任务失败。";
+    }
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   /* 已有的 initMerge() 保持不变 */
-  initExtract();   // <— 新增
+  initExtract();
+  initSpider();
 });
