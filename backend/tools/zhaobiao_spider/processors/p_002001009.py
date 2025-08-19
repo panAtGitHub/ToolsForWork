@@ -40,8 +40,11 @@ class TenderPlanProcessor(BaseProcessor):
         '设计统计',
         '施工统计',
         '拟招标项目名称',
+        '项目批准文件及文号',
         '招标人（建设单位）',
-        '联系人及联系方式',
+        '招标人联系人及联系方式',
+        '招标代理机构（如有）',
+        '招标代理机构联系人及联系方式',
         '估算总投资（元）',
         '资金来源',
         '建设内容',
@@ -49,8 +52,9 @@ class TenderPlanProcessor(BaseProcessor):
 
     FIELD_MAP = {
         '拟招标项目名称': ['拟招标项目名称', '项目名称'],
+        '项目批准文件及文号': ['项目批准文件及文号', '批准'],
         '招标人（建设单位）': ['招标人', '建设单位'],
-        '联系人及联系方式': ['联系人及联系方式', '联系方式', '联系人'],
+        '招标代理机构（如有）': ['招标代理机构', '代理'],
         '估算总投资（元）': ['估算总投资', '估算'],
         '资金来源': ['资金来源', '来源'],
         '建设内容': ['建设内容', '内容'],
@@ -95,20 +99,42 @@ class TenderPlanProcessor(BaseProcessor):
         return row
 
     def _parse_detail(self, html: str) -> Dict[str, Any]:
-        """解析详情页表格，按关键词抓取对应字段。"""
+        """解析详情页表格的前五行, 按行提取配对信息。"""
 
         soup = BeautifulSoup(html or '', 'html.parser')
-        result = {k: '' for k in self.FIELD_MAP}
+        result: Dict[str, str] = {
+            k: '' for k in list(self.FIELD_MAP) + [
+                '招标人联系人及联系方式',
+                '招标代理机构联系人及联系方式',
+            ]
+        }
 
-        for tr in soup.select('tr'):
+        rows = soup.select('tr')[:5]
+        for idx, tr in enumerate(rows):
             cells = tr.find_all(['td', 'th'])
-            if len(cells) < 2:
-                continue
-            label = cells[0].get_text(strip=True)
-            value = ' '.join(c.get_text(separator=' ', strip=True) for c in cells[1:])
-            for field, kws in self.FIELD_MAP.items():
-                if any(kw in label for kw in kws) and not result[field]:
-                    result[field] = value
+            if idx < 4:
+                pairs = [cells[i:i + 2] for i in range(0, len(cells), 2)]
+            else:
+                pairs = [cells[:2]] if len(cells) >= 2 else []
+
+            for pair in pairs:
+                if len(pair) < 2:
+                    continue
+                label = pair[0].get_text(strip=True)
+                value = pair[1].get_text(separator=' ', strip=True)
+
+                # 特殊处理联系人字段: 根据行号区分建设单位和代理机构
+                if '联系' in label:
+                    if idx == 1 and not result['招标人联系人及联系方式']:
+                        result['招标人联系人及联系方式'] = value
+                    elif idx == 2 and not result['招标代理机构联系人及联系方式']:
+                        result['招标代理机构联系人及联系方式'] = value
+                    continue
+
+                for field, kws in self.FIELD_MAP.items():
+                    if any(kw in label for kw in kws) and not result[field]:
+                        result[field] = value
+                        break
 
         return result
 
