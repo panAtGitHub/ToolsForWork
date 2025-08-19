@@ -99,7 +99,7 @@ class TenderPlanProcessor(BaseProcessor):
         return row
 
     def _parse_detail(self, html: str) -> Dict[str, Any]:
-        """解析详情页表格的前五行, 按行提取配对信息。"""
+        """解析详情页表格, 按行提取配对信息。"""
 
         soup = BeautifulSoup(html or '', 'html.parser')
         result: Dict[str, str] = {
@@ -109,32 +109,49 @@ class TenderPlanProcessor(BaseProcessor):
             ]
         }
 
-        rows = soup.select('tr')[:5]
-        for idx, tr in enumerate(rows):
+        last_entity = None
+        rows = soup.select('table tr')
+        for tr in rows:
             cells = tr.find_all(['td', 'th'])
-            if idx < 4:
+            if len(cells) < 2:
+                continue
+
+            if len(cells) >= 4 and len(cells) % 2 == 0:
                 pairs = [cells[i:i + 2] for i in range(0, len(cells), 2)]
             else:
-                pairs = [cells[:2]] if len(cells) >= 2 else []
+                pairs = [cells[:2]]
 
             for pair in pairs:
                 if len(pair) < 2:
                     continue
                 label = pair[0].get_text(strip=True)
                 value = pair[1].get_text(separator=' ', strip=True)
-
-                # 特殊处理联系人字段: 根据行号区分建设单位和代理机构
-                if '联系' in label:
-                    if idx == 1 and not result['招标人联系人及联系方式']:
-                        result['招标人联系人及联系方式'] = value
-                    elif idx == 2 and not result['招标代理机构联系人及联系方式']:
-                        result['招标代理机构联系人及联系方式'] = value
+                if not label:
                     continue
 
+                if '联系' in label:
+                    if last_entity == '招标人（建设单位）' and not result['招标人联系人及联系方式']:
+                        result['招标人联系人及联系方式'] = value
+                    elif last_entity == '招标代理机构（如有）' and not result['招标代理机构联系人及联系方式']:
+                        result['招标代理机构联系人及联系方式'] = value
+                    last_entity = None
+                    continue
+
+                matched = False
                 for field, kws in self.FIELD_MAP.items():
                     if any(kw in label for kw in kws) and not result[field]:
                         result[field] = value
+                        matched = True
+                        if field in (
+                            '招标人（建设单位）',
+                            '招标代理机构（如有）',
+                        ):
+                            last_entity = field
+                        else:
+                            last_entity = None
                         break
+                if not matched:
+                    last_entity = None
 
         return result
 
