@@ -5,6 +5,7 @@ from uuid import uuid4
 from threading import Thread
 from tools.merge_invoice_and_screenshot import merge
 from tools.extract_invoice import extract as extract_invoice   # 新增
+from tools.zhaobiao_spider.main import run as run_zhaobiao
 
 app = Flask(__name__,
             static_folder="../frontend",
@@ -18,7 +19,7 @@ def index():
 # task_id -> {
 #   status: uploading | processing | partial | done | error,
 #   pct: 0-100,
-#   pdf: str (生成的路径),
+#   pdf/txt/file: str (生成的路径),
 #   unpaired: list[str],
 #   error: str
 # }
@@ -103,6 +104,33 @@ def api_create_merge():
 
     return jsonify({"task_id": task_id}), 202
 
+# --------------------- 招标爬虫任务 -----------------------
+@app.route("/api/zhaobiao", methods=["POST"])
+def api_zhaobiao():
+    data = request.get_json() or {}
+    equal = data.get("equal") or "002001009"
+    rn = int(data.get("rn", 100))
+    outfmt = data.get("out", "csv")
+    start = data.get("start")
+    end = data.get("end")
+
+    task_id = uuid4().hex
+    tasks[task_id] = {"status": "processing", "pct": 0, "type": "zhaobiao"}
+
+    def _worker():
+        try:
+            file_path = run_zhaobiao(equal, rn, outfmt, start, end, True)
+            tasks[task_id].update({
+                "status": "done",
+                "pct": 100,
+                "file": file_path
+            })
+        except Exception as e:
+            tasks[task_id] = {"status": "error", "error": str(e)}
+
+    Thread(target=_worker, daemon=True).start()
+    return jsonify({"task_id": task_id}), 202
+
 # --------------------- 进度查询 -----------------------
 @app.route("/api/progress/<task_id>")
 def api_progress(task_id):
@@ -121,8 +149,8 @@ def api_download(task_id):
     if info["status"] not in ("done", "partial"):
         return jsonify({"error": "not ready"}), 409
 
-    # 这时 info 里可能有 pdf 或 txt
-    file_path = info.get("pdf") or info.get("txt")
+    # 这时 info 里可能有 pdf、txt 或其他文件
+    file_path = info.get("pdf") or info.get("txt") or info.get("file")
     if not file_path or not Path(file_path).exists():
         return jsonify({"error": "file missing"}), 410
 
