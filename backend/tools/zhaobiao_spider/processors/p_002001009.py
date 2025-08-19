@@ -109,9 +109,9 @@ class TenderPlanProcessor(BaseProcessor):
             ]
         }
 
-        last_entity = None
         rows = soup.select('table tr')
         for tr in rows:
+            row_entity = None
             cells = tr.find_all(['td', 'th'])
             if len(cells) < 2:
                 continue
@@ -130,11 +130,10 @@ class TenderPlanProcessor(BaseProcessor):
                     continue
 
                 if '联系' in label:
-                    if last_entity == '招标人（建设单位）' and not result['招标人联系人及联系方式']:
+                    if row_entity == '招标人（建设单位）' and not result['招标人联系人及联系方式']:
                         result['招标人联系人及联系方式'] = value
-                    elif last_entity == '招标代理机构（如有）' and not result['招标代理机构联系人及联系方式']:
+                    elif row_entity == '招标代理机构（如有）' and not result['招标代理机构联系人及联系方式']:
                         result['招标代理机构联系人及联系方式'] = value
-                    last_entity = None
                     continue
 
                 matched = False
@@ -146,12 +145,10 @@ class TenderPlanProcessor(BaseProcessor):
                             '招标人（建设单位）',
                             '招标代理机构（如有）',
                         ):
-                            last_entity = field
-                        else:
-                            last_entity = None
+                            row_entity = field
                         break
                 if not matched:
-                    last_entity = None
+                    row_entity = None
 
         return result
 
